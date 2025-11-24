@@ -1,1 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Ciclos de Vida (EOL)</title>
+    <!-- Carga Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuración personalizada de Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#3b82f6',
+                        'dark-bg': '#1f2937',
+                        'dark-card': '#374151',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilo para la fuente Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    </style>
+</head>
+<body class="bg-dark-bg text-gray-100 min-h-screen p-4 md:p-8 font-sans">
 
+    <div class="max-w-4xl mx-auto">
+        <!-- Título y Descripción -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-primary-blue mb-2">
+                Buscador de Fin de Vida (EOL)
+            </h1>
+            <p class="text-gray-400">
+                Consulta los ciclos de vida y fechas de soporte para software, sistemas operativos y hardware.
+            </p>
+        </header>
+
+        <!-- Formulario de Búsqueda -->
+        <div class="bg-dark-card p-6 rounded-xl shadow-2xl mb-8 border border-gray-700">
+            <div class="flex flex-col space-y-4 md:space-y-0 md:flex-row md:space-x-4">
+                
+                <!-- Campo de Entrada con Autocompletado -->
+                <div class="flex-grow">
+                    <label for="productInput" class="block text-sm font-medium text-gray-300 mb-1">
+                        Fabricante, Marca, Modelo o Producto EOL
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="productInput" placeholder="Escribe para ver sugerencias (ej: 'cisco', 'ubuntu', 'ios')..."
+                               class="w-full px-4 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white focus:ring-primary-blue focus:border-primary-blue transition duration-150"
+                               value="ubuntu">
+                        <!-- Contenedor de Sugerencias -->
+                        <div id="suggestionsBox" class="absolute z-10 w-full max-h-60 overflow-y-auto bg-gray-700 rounded-b-lg shadow-xl mt-1 hidden border border-gray-500">
+                            <!-- Las sugerencias se insertan aquí -->
+                        </div>
+                    </div>
+                    <p id="loadingListMessage" class="text-xs text-gray-400 mt-1 italic">
+                        Cargando lista completa de productos...
+                    </p>
+                </div>
+
+                <!-- Selector de Perfil -->
+                <div class="flex flex-col w-full md:w-auto md:min-w-[200px]">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">
+                        Perfil de Usuario
+                    </label>
+                    <div class="flex bg-gray-600 rounded-lg p-1 space-x-2">
+                        <button id="generalBtn" data-profile="general"
+                                class="flex-1 px-3 py-2 text-sm font-semibold rounded-md bg-primary-blue text-white transition duration-150 shadow-md">
+                            Público General
+                        </button>
+                        <button id="techBtn" data-profile="technician"
+                                class="flex-1 px-3 py-2 text-sm font-semibold rounded-md text-gray-300 hover:bg-gray-500/50 transition duration-150">
+                            Técnico
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Botón de Búsqueda -->
+            <button id="searchBtn"
+                    class="w-full mt-6 px-6 py-3 bg-green-500 text-white font-bold rounded-lg shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-[1.01] focus:ring-4 focus:ring-green-500/50 flex items-center justify-center disabled:opacity-50"
+                    disabled>
+                <svg id="searchIcon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <svg id="loadingSpinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Buscar EOL
+            </button>
+        </div>
+
+        <!-- Área de Resultados -->
+        <div id="resultsArea" class="space-y-6">
+            <p id="initialMessage" class="text-center text-gray-500 italic p-6 rounded-xl bg-dark-card/50">
+                Introduce un producto y haz clic en "Buscar EOL" para ver los resultados.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const productInput = document.getElementById('productInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const generalBtn = document.getElementById('generalBtn');
+        const techBtn = document.getElementById('techBtn');
+        const resultsArea = document.getElementById('resultsArea');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const searchIcon = document.getElementById('searchIcon');
+        const initialMessage = document.getElementById('initialMessage');
+        const suggestionsBox = document.getElementById('suggestionsBox');
+        const loadingListMessage = document.getElementById('loadingListMessage');
+
+        let currentProfile = 'general';
+        const BASE_URL = 'https://endoflife.date/api/';
+        let all_products = []; // Lista global de todos los productos para autocompletar
+        
+        // --- Utility Functions ---
+
+        // Función para manejar el Exponential Backoff en las llamadas a la API
+        async function fetchWithRetry(url, options = {}, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        // Para errores 4xx y 5xx, se lanza un error para activar el reintento
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i < retries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000; // Retroceso exponencial con 'jitter'
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        console.warn(`Retry ${i + 1} for ${url}. Delaying ${delay}ms...`);
+                    } else {
+                        // Si todos los reintentos fallan, se lanza el error final
+                        throw error;
+                    }
+                }
+            }
+        }
+
+        /**
+         * Fetches the list of all products from the EOL API to enable autocomplete.
+         */
+        async function fetchProductList() {
+            loadingListMessage.textContent = 'Cargando lista completa de productos...';
+            loadingListMessage.classList.remove('text-red-400');
+            loadingListMessage.classList.add('text-gray-400');
+            
+            try {
+                const response = await fetchWithRetry(`${BASE_URL}all.json`);
+                all_products = await response.json();
+                loadingListMessage.textContent = `Lista cargada. ${all_products.length} productos disponibles.`;
+                loadingListMessage.classList.add('text-green-400');
+                console.log(`Fetched ${all_products.length} products.`);
+            } catch (error) {
+                console.error('Error fetching product list:', error);
+                loadingListMessage.textContent = 'Error al cargar la lista de productos. El autocompletado no estará disponible.';
+                loadingListMessage.classList.add('text-red-400');
+            }
+        }
+
+        /**
+         * Sanitiza y normaliza el input para construir la ID del producto.
+         * Esta es una función simplificada y más robusta para IDs de la API EOL.
+         * @param {string} input - El texto ingresado por el usuario.
+         * @returns {string} La ID de producto normalizada (ej: 'Cisco IOS' -> 'cisco-ios').
+         */
+        function normalizeProductId(input) {
+            return input
+                .toLowerCase()
+                .trim()
+                // Convertir cualquier cosa que no sea una letra o número en un guión,
+                // que es el patrón más común para las IDs de la API EOL.
+                .replace(/[^a-z0-9]+/g, '-') 
+                // Asegura que no haya guiones al inicio o al final
+                .replace(/^-+|-+$/g, '');
+        }
+
+        /**
+         * Formatea la fecha para una mejor legibilidad.
+         * @param {string | undefined} dateString - La fecha en formato YYYY-MM-DD.
+         * @returns {string} Fecha formateada o un mensaje si no está disponible.
+         */
+        function formatDate(dateString) {
+            if (!dateString) return 'No definida';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        /**
+         * Determina el estado de EOL (End of Life) para un ciclo.
+         * @param {object} cycle - El objeto del ciclo de vida.
+         * @returns {{text: string, color: string}} Estado y clase de color Tailwind.
+         */
+        function getEolStatus(cycle) {
+            if (cycle.eol === true) {
+                return { text: '¡Fin de Soporte (EOL)!', color: 'bg-red-600' };
+            }
+            if (!cycle.eol || cycle.eol === false) {
+                 return { text: 'Soportada', color: 'bg-green-600' };
+            }
+
+            const eolDate = new Date(cycle.eol);
+            const now = new Date();
+            const diffDays = Math.ceil((eolDate - now) / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 0) {
+                return { text: 'Fin de Soporte (EOL)', color: 'bg-red-600' };
+            } else if (diffDays <= 180) { // Menos de 6 meses
+                return { text: 'EOL Pronto', color: 'bg-yellow-500' };
+            } else {
+                return { text: 'Soportada', color: 'bg-green-600' };
+            }
+        }
+        
+        // --- Core Logic ---
+
+        /**
+         * Renderiza los resultados en el área de resultados basándose en el perfil.
+         * @param {string} productId - La ID del producto.
+         * @param {Array<object>} data - Los datos de los ciclos de vida.
+         */
+        function renderResults(productId, data) {
+            resultsArea.innerHTML = ''; // Limpiar resultados anteriores
+            initialMessage.classList.add('hidden'); // Ocultar mensaje inicial
+
+            if (data.length === 0) {
+                resultsArea.innerHTML = `<p class="text-center text-red-400 p-6 rounded-xl bg-dark-card border border-red-500">
+                    No se encontraron ciclos de vida para el producto "${productId}". Asegúrate de usar una ID válida o selecciona de la lista de sugerencias.
+                </p>`;
+                return;
+            }
+
+            const title = `<h2 class="text-2xl font-bold text-primary-blue mb-4">
+                Ciclos de Vida Encontrados para: <span class="text-white">${productId}</span>
+            </h2>`;
+            resultsArea.innerHTML = title;
+
+            if (currentProfile === 'general') {
+                renderGeneralView(data, productId);
+            } else {
+                renderTechnicianView(data, productId);
+            }
+        }
+
+        /**
+         * Genera la vista simplificada para el público general.
+         * Muestra solo los ciclos más importantes (típicamente los que no son EOL).
+         * @param {Array<object>} cycles - Los datos de los ciclos de vida.
+         * @param {string} productId - La ID del producto.
+         */
+        function renderGeneralView(cycles, productId) {
+            // Priorizar los ciclos que están activos o en soporte
+            const activeCycles = cycles.filter(c => getEolStatus(c).text !== 'Fin de Soporte (EOL)');
+            const displayCycles = activeCycles.length > 0 ? activeCycles : cycles; // Si no hay activos, mostrar todos
+
+            let html = '<div class="space-y-4">';
+            
+            // Tomar el ciclo más reciente no EOL para el resumen
+            const primaryCycle = activeCycles.length > 0 ? activeCycles[0] : cycles[0];
+            
+            if (primaryCycle) {
+                const status = getEolStatus(primaryCycle);
+                const eolDate = formatDate(primaryCycle.eol);
+
+                html += `
+                    <div class="bg-dark-card p-6 rounded-xl shadow-lg border border-gray-700">
+                        <h3 class="text-xl font-semibold mb-3 text-primary-blue">Resumen Rápido (Versión ${primaryCycle.cycle})</h3>
+                        <div class="flex flex-wrap items-center space-y-2 md:space-y-0 md:space-x-4">
+                            <span class="text-lg font-medium">Estado General:</span>
+                            <span class="px-4 py-1 text-sm font-bold text-white rounded-full ${status.color}">
+                                ${status.text}
+                            </span>
+                        </div>
+                        <p class="mt-3 text-gray-300">
+                            La versión principal ${primaryCycle.cycle} de ${productId} tiene su fin de vida (EOL) programado para: 
+                            <span class="font-bold text-white">${eolDate}</span>.
+                        </p>
+                        <p class="mt-2 text-sm text-gray-400 italic">
+                            Esta vista muestra la información clave de soporte. Para detalles de parches y versiones, cambia al perfil "Técnico".
+                        </p>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            resultsArea.innerHTML += html;
+        }
+
+        /**
+         * Genera la vista detallada para técnicos.
+         * Muestra todos los ciclos con todas las fechas.
+         * @param {Array<object>} cycles - Los datos de los ciclos de vida.
+         * @param {string} productId - La ID del producto.
+         */
+        function renderTechnicianView(cycles, productId) {
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
+
+            cycles.forEach(cycle => {
+                const status = getEolStatus(cycle);
+                const maintenanceDate = formatDate(cycle.eoldate);
+                const releaseDate = formatDate(cycle.release);
+                const latestVersion = cycle.latest || 'N/A';
+
+                html += `
+                    <div class="bg-dark-card p-5 rounded-xl shadow-lg border-l-4 ${status.color.replace('bg-', 'border-')} transition duration-300 hover:shadow-2xl">
+                        <div class="flex justify-between items-start mb-3">
+                            <h3 class="text-xl font-bold text-white">Versión ${cycle.cycle}</h3>
+                            <span class="px-3 py-1 text-xs font-semibold text-white rounded-full ${status.color}">
+                                ${status.text}
+                            </span>
+                        </div>
+                        <div class="space-y-2 text-sm">
+                            <p><span class="font-semibold text-gray-300">Versión Estable:</span> <span class="text-primary-blue">${latestVersion}</span></p>
+                            <p><span class="font-semibold text-gray-300">Fecha de Lanzamiento:</span> ${releaseDate}</p>
+                            <p><span class="font-semibold text-gray-300">Fin de Mantenimiento:</span> ${maintenanceDate}</p>
+                            <p><span class="font-semibold text-gray-300">Fin de Soporte (EOL):</span> ${formatDate(cycle.eol)}</p>
+                            ${cycle.link ? `<a href="${cycle.link}" target="_blank" class="text-primary-blue hover:text-blue-400 underline block mt-2">Documentación del Ciclo</a>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            resultsArea.innerHTML += html;
+        }
+
+        /**
+         * Llama a la API de endoflife.date y maneja el flujo de la aplicación.
+         */
+        async function searchEol() {
+            const rawInput = productInput.value;
+            // Usamos la normalización más robusta.
+            const productId = normalizeProductId(rawInput); 
+
+            if (!productId) {
+                resultsArea.innerHTML = `<p class="text-center text-yellow-400 p-6 rounded-xl bg-dark-card border border-yellow-500">
+                    Por favor, introduce un nombre de producto válido.
+                </p>`;
+                return;
+            }
+
+            // UI Feedback: Loading state
+            searchBtn.disabled = true;
+            searchBtn.classList.add('bg-gray-500');
+            searchBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+            searchIcon.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            resultsArea.innerHTML = `<p class="text-center text-gray-400 p-6">Cargando datos para "${productId}"...</p>`;
+
+            const apiUrl = `${BASE_URL}${productId}.json`;
+
+            try {
+                const response = await fetchWithRetry(apiUrl);
+                const data = await response.json();
+                
+                // Si la API devuelve un objeto (error) o un array vacío, manejarlo
+                if (Array.isArray(data) && data.length > 0) {
+                    renderResults(productId, data);
+                } else {
+                    // endoflife.date devuelve [] o un objeto de error (404)
+                    renderResults(productId, []);
+                }
+
+            } catch (error) {
+                // Captura errores de red o errores internos (status 5xx)
+                console.error('Error fetching EOL data:', error);
+                resultsArea.innerHTML = `<div class="bg-red-900/50 p-6 rounded-xl border border-red-600 text-red-300">
+                    <p class="font-bold mb-2">Error en la Búsqueda:</p>
+                    <p>No pudimos conectar con la base de datos o el producto "${rawInput}" (ID generada: ${productId}) no se encuentra.</p>
+                    <p class="text-sm mt-2 italic">Asegúrate de que la ID del producto sea correcta o selecciona una opción del autocompletado.</p>
+                </div>`;
+            } finally {
+                // UI Feedback: Reset state
+                searchBtn.disabled = false;
+                searchBtn.classList.remove('bg-gray-500');
+                searchBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                loadingSpinner.classList.add('hidden');
+                searchIcon.classList.remove('hidden');
+            }
+        }
+        
+        /**
+         * Muestra sugerencias de autocompletado basadas en la lista de productos cargada.
+         */
+        function handleInputSuggestions() {
+            const input = productInput.value.toLowerCase().trim();
+            suggestionsBox.innerHTML = '';
+            
+            // Mostrar sugerencias solo si hay al menos 2 caracteres y la lista está cargada
+            if (input.length < 2 || all_products.length === 0) {
+                suggestionsBox.classList.add('hidden');
+                return;
+            }
+
+            // Filtrar productos que contienen el texto de entrada y mostrar los primeros 10
+            const filtered = all_products
+                .filter(p => p.toLowerCase().includes(input))
+                .slice(0, 10); 
+
+            if (filtered.length > 0) {
+                filtered.forEach(product => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3 cursor-pointer hover:bg-gray-600 text-gray-100 transition duration-100 truncate';
+                    item.textContent = product;
+                    item.dataset.product = product;
+                    
+                    // Al hacer clic en una sugerencia, se rellena el input con la ID exacta y se inicia la búsqueda
+                    item.addEventListener('click', () => {
+                        productInput.value = product;
+                        suggestionsBox.classList.add('hidden');
+                        searchEol();
+                    });
+                    suggestionsBox.appendChild(item);
+                });
+                suggestionsBox.classList.remove('hidden');
+            } else {
+                suggestionsBox.classList.add('hidden');
+            }
+        }
+
+        // --- Event Listeners ---
+
+        /**
+         * Alterna entre los perfiles de usuario 'general' y 'technician'.
+         * @param {string} profile - El perfil a activar.
+         */
+        function switchProfile(profile) {
+            currentProfile = profile;
+            
+            // Update button styles
+            if (profile === 'general') {
+                generalBtn.classList.add('bg-primary-blue', 'text-white');
+                generalBtn.classList.remove('text-gray-300', 'hover:bg-gray-500/50');
+                techBtn.classList.remove('bg-primary-blue', 'text-white');
+                techBtn.classList.add('text-gray-300', 'hover:bg-gray-500/50');
+            } else {
+                techBtn.classList.add('bg-primary-blue', 'text-white');
+                techBtn.classList.remove('text-gray-300', 'hover:bg-gray-500/50');
+                generalBtn.classList.remove('bg-primary-blue', 'text-white');
+                generalBtn.classList.add('text-gray-300', 'hover:bg-gray-500/50');
+            }
+
+            // Re-render results if there are results
+            const currentTitle = resultsArea.querySelector('h2');
+            if (currentTitle) {
+                // Re-ejecutar la búsqueda para refrescar la vista, si hay un producto en el input
+                if (productInput.value) {
+                     searchEol();
+                }
+            }
+        }
+
+        // Initialize event listeners
+        window.onload = function() {
+            // 1. Fetch the complete list of products first for autocomplete
+            fetchProductList();
+
+            // Initial button state check
+            if (productInput.value.trim() !== '') {
+                searchBtn.disabled = false;
+            }
+
+            // Event listener para manejar el input y el autocompletado
+            productInput.addEventListener('input', () => {
+                searchBtn.disabled = productInput.value.trim() === '';
+                handleInputSuggestions(); // Lógica de autocompletado
+            });
+            
+            // Ocultar sugerencias al perder el foco (con un pequeño delay para permitir clics)
+            productInput.addEventListener('blur', () => {
+                setTimeout(() => suggestionsBox.classList.add('hidden'), 200); 
+            });
+            // Mostrar sugerencias de nuevo al obtener el foco, si ya hay texto
+            productInput.addEventListener('focus', handleInputSuggestions);
+
+
+            searchBtn.addEventListener('click', searchEol);
+            productInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (!searchBtn.disabled) {
+                        searchEol();
+                    }
+                }
+            });
+
+            generalBtn.addEventListener('click', () => switchProfile('general'));
+            techBtn.addEventListener('click', () => switchProfile('technician'));
+            
+            // Initial search on load (using the default value 'ubuntu')
+            if (productInput.value) {
+                searchEol();
+            }
+        };
+
+    </script>
+</body>
+</html>
